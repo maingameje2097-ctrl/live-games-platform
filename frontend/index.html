@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Countryle — Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- ============ AUDIENCE-FACING GAME SCREEN ============ -->
+  <div id="stage">
+
+    <header id="topbar">
+      <div id="wordmarkRow">
+        <span id="globeIcon">🌐</span>
+        <div id="wordmark">COUNTRYLE</div>
+        <button id="helpBtn" aria-label="How to play">?</button>
+      </div>
+      <div id="badges">
+        <span id="difficultyBadge" class="badge">Standard</span>
+        <span id="timerBadge" class="badge badge--timer">--</span>
+      </div>
+    </header>
+
+    <div id="connectionBanner" class="banner hidden"></div>
+
+    <main id="board">
+      <div id="hintStrip"></div>
+      <div id="closestTracker" class="hidden"></div>
+      <ul id="guessList"></ul>
+      <div id="emptyState">Waiting for the round to start…</div>
+    </main>
+
+    <div id="commentTicker" aria-live="polite"></div>
+
+    <footer id="scorebar">
+      <div class="score-tabs">
+        <button class="score-tab active" data-tab="round">This Round</button>
+        <button class="score-tab" data-tab="total">All-Time</button>
+      </div>
+      <ol id="scoreList"></ol>
+    </footer>
+
+  </div>
+
+  <!-- ============ HOW TO PLAY MODAL ============ -->
+  <div id="helpModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>How to Play Countryle</span>
+        <button id="closeHelp" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p><b>Goal:</b> Figure out the mystery country before time runs out. Comment the country's name in the TikTok live chat to guess — first correct guess wins the round.</p>
+        <p><b>Reading your feedback tags:</b></p>
+        <ul>
+          <li><span class="chip chip--match">🌍 Same continent</span> the target is on the same continent as your guess</li>
+          <li><span class="chip chip--pop">Pop ▲/▼</span> the target's population is higher / lower than your guess</li>
+          <li><span class="chip chip--area">Area ▲/▼</span> the target's land area is bigger / smaller than your guess</li>
+          <li><span class="chip chip--direction">↗ NE · 7,533 km</span> compass direction &amp; distance from your guess to the target</li>
+          <li><span class="chip">62% close</span> an overall "hot or cold" score — 100% means correct</li>
+        </ul>
+        <p><b>Hints:</b> the host can reveal up to 3 hints (continent → first letter → capital city). Each hint used slightly lowers the points available that round.</p>
+        <p><b>Difficulty:</b> changes how long each round lasts — Easy gives the most time, Expert the least.</p>
+        <p><b>Scoring:</b> correct guesses earn points, with a bonus for being first. "This Round" resets every round; "All-Time" adds up across the whole stream.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HOST CONTROL DRAWER (same screen, collapsible) ============ -->
+  <button id="hostTab" aria-label="Open host controls">⚙</button>
+
+  <aside id="hostDrawer" class="hidden">
+    <div class="drawer-header">
+      <span>Host Controls</span>
+      <button id="closeDrawer" aria-label="Close">✕</button>
+    </div>
+
+    <section class="drawer-section">
+      <label class="field-label" for="tiktokUsername">TikTok username going live</label>
+      <div class="field-row">
+        <input id="tiktokUsername" type="text" placeholder="e.g. yourusername" autocomplete="off" />
+        <button id="connectBtn" class="btn btn--primary">Connect</button>
+      </div>
+      <div id="connectStatus" class="status-line">Not connected</div>
+      <button id="disconnectBtn" class="btn btn--ghost hidden">Disconnect</button>
+    </section>
+
+    <section class="drawer-section">
+      <label class="field-label">Test Mode (rehearse without going live)</label>
+      <label class="toggle">
+        <input type="checkbox" id="testModeToggle" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span id="testModeLabel">Off</span>
+      </label>
+    </section>
+
+    <section class="drawer-section">
+      <label class="field-label">Difficulty</label>
+      <div class="segmented" id="difficultySegmented">
+        <button data-level="easy">Easy</button>
+        <button data-level="standard" class="active">Standard</button>
+        <button data-level="expert">Expert</button>
+      </div>
+    </section>
+
+    <section class="drawer-section drawer-row">
+      <button id="startGameBtn" class="btn btn--primary">Start Round</button>
+      <button id="hintBtn" class="btn btn--secondary">Give Hint</button>
+    </section>
+
+    <section class="drawer-section">
+      <label class="field-label" for="hostAnswerInput">Type an answer / test comment</label>
+      <div class="field-row">
+        <input id="hostAnswerInput" type="text" placeholder="Type a country name…" autocomplete="off" />
+        <button id="hostSubmitBtn" class="btn btn--secondary">Send</button>
+      </div>
+    </section>
+  </aside>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
