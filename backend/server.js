@@ -154,6 +154,11 @@ io.on("connection", (socket) => {
     io.emit("hint", { text: hint });
   });
 
+  socket.on("host:resetTotalScores", () => {
+    leaderboard.resetTotal();
+    broadcastLeaderboards();
+  });
+
   // Host typing an answer/test comment directly on the game screen (no second device needed)
   socket.on("host:submitAnswer", (text) => {
     pushComment({ userId: "host", username: "Host", text });

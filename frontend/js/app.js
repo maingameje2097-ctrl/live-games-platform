@@ -5,36 +5,40 @@ const el = {
   banner: document.getElementById("connectionBanner"),
   difficultyBadge: document.getElementById("difficultyBadge"),
   timerBadge: document.getElementById("timerBadge"),
+  modeBadge: document.getElementById("modeBadge"),
   hintStrip: document.getElementById("hintStrip"),
   closestTracker: document.getElementById("closestTracker"),
   guessList: document.getElementById("guessList"),
   emptyState: document.getElementById("emptyState"),
+  commentTicker: document.getElementById("commentTicker"),
 
   helpBtn: document.getElementById("helpBtn"),
   helpModal: document.getElementById("helpModal"),
   closeHelp: document.getElementById("closeHelp"),
-  commentTicker: document.getElementById("commentTicker"),
-  scoreList: document.getElementById("scoreList"),
-  scoreTabs: document.querySelectorAll(".score-tab"),
 
-  hostTab: document.getElementById("hostTab"),
-  hostDrawer: document.getElementById("hostDrawer"),
-  closeDrawer: document.getElementById("closeDrawer"),
+  hintIconBtn: document.getElementById("hintIconBtn"),
+  leaderboardBtn: document.getElementById("leaderboardBtn"),
+  settingsBtn: document.getElementById("settingsBtn"),
+  panelBackdrop: document.getElementById("panelBackdrop"),
+  settingsDrawer: document.getElementById("settingsDrawer"),
+  leaderboardDrawer: document.getElementById("leaderboardDrawer"),
+  modeStatusCard: document.getElementById("modeStatusCard"),
 
   tiktokUsername: document.getElementById("tiktokUsername"),
   connectBtn: document.getElementById("connectBtn"),
   disconnectBtn: document.getElementById("disconnectBtn"),
   connectStatus: document.getElementById("connectStatus"),
 
-  testModeToggle: document.getElementById("testModeToggle"),
-  testModeLabel: document.getElementById("testModeLabel"),
-
+  modeSegmented: document.getElementById("modeSegmented"),
   difficultySegmented: document.getElementById("difficultySegmented"),
   startGameBtn: document.getElementById("startGameBtn"),
-  hintBtn: document.getElementById("hintBtn"),
 
   hostAnswerInput: document.getElementById("hostAnswerInput"),
   hostSubmitBtn: document.getElementById("hostSubmitBtn"),
+  resetTotalBtn: document.getElementById("resetTotalBtn"),
+
+  scoreList: document.getElementById("scoreList"),
+  scoreTabs: document.querySelectorAll(".score-tab"),
 };
 
 let latestLeaderboards = { round: [], total: [] };
@@ -43,6 +47,7 @@ let roundSecondsLeft = 0;
 let timerInterval = null;
 let closestThisRound = null; // { username, distanceKm, proximity, guessText }
 let roundGuesses = []; // every guess kept for the round, always re-sorted by closeness before rendering
+let latestStatus = { connected: false, testMode: true };
 
 const COMPASS_ARROW = {
   N: "↑", NNE: "↗", NE: "↗", ENE: "↗",
@@ -51,9 +56,22 @@ const COMPASS_ARROW = {
   W: "←", WNW: "↖", NW: "↖", NNW: "↖",
 };
 
-// ---------- Host drawer open/close ----------
-el.hostTab.addEventListener("click", () => el.hostDrawer.classList.remove("hidden"));
-el.closeDrawer.addEventListener("click", () => el.hostDrawer.classList.add("hidden"));
+// ---------- Side panels (Settings / Leaderboard) open + close ----------
+function openPanel(panelEl) {
+  el.panelBackdrop.classList.remove("hidden");
+  panelEl.classList.remove("hidden");
+}
+function closeAllPanels() {
+  el.panelBackdrop.classList.add("hidden");
+  el.settingsDrawer.classList.add("hidden");
+  el.leaderboardDrawer.classList.add("hidden");
+}
+el.settingsBtn.addEventListener("click", () => openPanel(el.settingsDrawer));
+el.leaderboardBtn.addEventListener("click", () => openPanel(el.leaderboardDrawer));
+el.panelBackdrop.addEventListener("click", closeAllPanels);
+document.querySelectorAll(".panel-close").forEach((btn) => {
+  btn.addEventListener("click", closeAllPanels);
+});
 
 // ---------- How to play modal ----------
 el.helpBtn.addEventListener("click", () => el.helpModal.classList.remove("hidden"));
@@ -84,11 +102,13 @@ el.disconnectBtn.addEventListener("click", () => {
   });
 });
 
-// ---------- Test mode ----------
-el.testModeToggle.addEventListener("change", (e) => {
-  const enabled = e.target.checked;
-  el.testModeLabel.textContent = enabled ? "On — simulated viewers" : "Off";
-  socket.emit("host:setTestMode", enabled);
+// ---------- Mode (Live / Test) ----------
+el.modeSegmented.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-mode]");
+  if (!btn) return;
+  [...el.modeSegmented.children].forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  socket.emit("host:setTestMode", btn.dataset.mode === "test");
 });
 
 // ---------- Difficulty ----------
@@ -102,7 +122,7 @@ el.difficultySegmented.addEventListener("click", (e) => {
 
 // ---------- Round controls ----------
 el.startGameBtn.addEventListener("click", () => socket.emit("host:startGame"));
-el.hintBtn.addEventListener("click", () => socket.emit("host:requestHint"));
+el.hintIconBtn.addEventListener("click", () => socket.emit("host:requestHint"));
 
 el.hostSubmitBtn.addEventListener("click", submitHostAnswer);
 el.hostAnswerInput.addEventListener("keydown", (e) => {
@@ -114,6 +134,13 @@ function submitHostAnswer() {
   socket.emit("host:submitAnswer", text);
   el.hostAnswerInput.value = "";
 }
+
+// ---------- Reset all-time leaderboard ----------
+el.resetTotalBtn.addEventListener("click", () => {
+  if (confirm("Reset the All-Time leaderboard? This can't be undone.")) {
+    socket.emit("host:resetTotalScores");
+  }
+});
 
 // ---------- Scoreboard tabs ----------
 el.scoreTabs.forEach((tab) => {
@@ -129,7 +156,7 @@ function renderScoreboard() {
   const list = activeScoreTab === "round" ? latestLeaderboards.round : latestLeaderboards.total;
   el.scoreList.innerHTML = "";
   if (!list.length) {
-    el.scoreList.innerHTML = `<li style="color:var(--text-muted)">No scores yet</li>`;
+    el.scoreList.innerHTML = `<li class="empty-row">No scores yet — correct guesses will show up here.</li>`;
     return;
   }
   list.forEach((entry, i) => {
@@ -145,8 +172,32 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
+// ---------- Mode / status summary ----------
+function updateModeUI() {
+  const { connected, testMode, username } = latestStatus;
+
+  if (connected) {
+    el.modeBadge.textContent = `● Live — @${username || ""}`;
+    el.modeBadge.classList.add("is-live");
+    el.modeStatusCard.textContent = "Mode: Live — connected to TikTok, scoring counts for real";
+    el.modeStatusCard.className = "status-card";
+  } else if (testMode) {
+    el.modeBadge.textContent = "Test Mode";
+    el.modeBadge.classList.remove("is-live");
+    el.modeStatusCard.textContent = "Mode: Test — simulated guesses, practice only, scores not counted toward Live play";
+    el.modeStatusCard.className = "status-card is-test";
+  } else {
+    el.modeBadge.textContent = "Not connected";
+    el.modeBadge.classList.remove("is-live");
+    el.modeStatusCard.textContent = "Not connected — connect your TikTok username below, or flip on Test Mode to rehearse";
+    el.modeStatusCard.className = "status-card is-off";
+  }
+}
+
 // ---------- Socket event handlers ----------
 socket.on("status", (status) => {
+  latestStatus = { ...latestStatus, ...status };
+
   if (status.connected) {
     el.banner.classList.add("hidden");
     el.connectStatus.textContent = `Connected to @${status.username}`;
@@ -161,6 +212,7 @@ socket.on("status", (status) => {
   if (status.difficulty) {
     el.difficultyBadge.textContent = capitalize(status.difficulty);
   }
+  updateModeUI();
 });
 
 socket.on("leaderboard", (data) => {
@@ -197,12 +249,12 @@ socket.on("guessFeedback", (fb) => {
     updateClosestTracker();
   }
 
-  renderGuessList();
+  renderGuessList(fb);
 });
 
-function buildGuessRow(fb, rank) {
+function buildGuessRow(fb, rank, isNewest) {
   const row = document.createElement("li");
-  row.className = "guess-row" + (fb.correct ? " correct" : "");
+  row.className = "guess-row" + (fb.correct ? " correct" : "") + (isNewest ? " guess-row--new" : "");
   const rankChip = `<span class="chip chip--rank">#${rank}</span>`;
   if (fb.correct) {
     row.innerHTML = `${rankChip}<span class="guess-name">${escapeHtml(fb.username)}</span><span class="chip chip--match">✓ Correct — ${escapeHtml(fb.guessText)}</span>`;
@@ -222,14 +274,14 @@ function buildGuessRow(fb, rank) {
 }
 
 // Re-sorts every guess this round by closeness (correct/0km first, farthest last) and
-// re-renders the whole list in that order, per-user latest guess only isn't required —
-// every individual guess is kept visible until the round ends.
-function renderGuessList() {
+// re-renders the whole list in that order — every individual guess stays visible until
+// the round ends, nothing is deduped per user.
+function renderGuessList(newestFb) {
   el.emptyState.classList.toggle("hidden", roundGuesses.length > 0);
   const sorted = [...roundGuesses].sort((a, b) => a.distanceKm - b.distanceKm);
   el.guessList.innerHTML = "";
   sorted.forEach((fb, i) => {
-    el.guessList.appendChild(buildGuessRow(fb, i + 1));
+    el.guessList.appendChild(buildGuessRow(fb, i + 1, fb === newestFb));
   });
 }
 
@@ -285,3 +337,5 @@ function updateTimerBadge() {
 function capitalize(s) {
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
+
+updateModeUI();

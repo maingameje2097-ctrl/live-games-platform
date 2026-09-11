@@ -11,6 +11,10 @@ class Leaderboard {
     this.roundScores = new Map();
   }
 
+  resetTotal() {
+    this.totalScores = new Map();
+  }
+
   add(userId, username, points) {
     const totalEntry = this.totalScores.get(userId) || { username, score: 0 };
     totalEntry.username = username; // keep latest display name
