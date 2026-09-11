@@ -42,6 +42,7 @@ let activeScoreTab = "round";
 let roundSecondsLeft = 0;
 let timerInterval = null;
 let closestThisRound = null; // { username, distanceKm, proximity, guessText }
+let roundGuesses = []; // every guess kept for the round, always re-sorted by closeness before rendering
 
 const COMPASS_ARROW = {
   N: "↑", NNE: "↗", NE: "↗", ENE: "↗",
@@ -168,12 +169,12 @@ socket.on("leaderboard", (data) => {
 });
 
 socket.on("roundStart", (data) => {
-  el.guessList.innerHTML = "";
+  roundGuesses = [];
   el.hintStrip.textContent = "";
-  el.emptyState.classList.add("hidden");
   el.difficultyBadge.textContent = capitalize(data.difficulty);
   closestThisRound = null;
   updateClosestTracker();
+  renderGuessList();
   startTimer(data.seconds);
 });
 
@@ -184,13 +185,31 @@ socket.on("hint", (data) => {
 });
 
 socket.on("guessFeedback", (fb) => {
+  roundGuesses.push(fb);
+
+  if (!fb.correct && (!closestThisRound || fb.distanceKm < closestThisRound.distanceKm)) {
+    closestThisRound = {
+      username: fb.username,
+      guessText: fb.guessText,
+      distanceKm: fb.distanceKm,
+      proximity: fb.proximity,
+    };
+    updateClosestTracker();
+  }
+
+  renderGuessList();
+});
+
+function buildGuessRow(fb, rank) {
   const row = document.createElement("li");
   row.className = "guess-row" + (fb.correct ? " correct" : "");
+  const rankChip = `<span class="chip chip--rank">#${rank}</span>`;
   if (fb.correct) {
-    row.innerHTML = `<span class="guess-name">${escapeHtml(fb.username)}</span><span class="chip chip--match">✓ Correct — ${escapeHtml(fb.guessText)}</span>`;
+    row.innerHTML = `${rankChip}<span class="guess-name">${escapeHtml(fb.username)}</span><span class="chip chip--match">✓ Correct — ${escapeHtml(fb.guessText)}</span>`;
   } else {
     const arrow = COMPASS_ARROW[fb.direction] || "•";
     row.innerHTML = `
+      ${rankChip}
       <span class="guess-name">${escapeHtml(fb.username)}: ${escapeHtml(fb.guessText)}</span>
       <span class="chip ${fb.continentMatch ? "chip--match" : "chip--miss"}">🌍 ${fb.continentMatch ? "same continent" : "different continent"}</span>
       <span class="chip chip--pop">Pop ${fb.populationHint === "higher" ? "▲" : "▼"}</span>
@@ -198,18 +217,21 @@ socket.on("guessFeedback", (fb) => {
       <span class="chip chip--direction">${arrow} ${fb.direction} · ${fb.distanceKm.toLocaleString()} km away</span>
       <span class="chip chip--proximity">${fb.proximity}% close</span>
     `;
-    if (!closestThisRound || fb.distanceKm < closestThisRound.distanceKm) {
-      closestThisRound = {
-        username: fb.username,
-        guessText: fb.guessText,
-        distanceKm: fb.distanceKm,
-        proximity: fb.proximity,
-      };
-      updateClosestTracker();
-    }
   }
-  el.guessList.prepend(row);
-});
+  return row;
+}
+
+// Re-sorts every guess this round by closeness (correct/0km first, farthest last) and
+// re-renders the whole list in that order, per-user latest guess only isn't required —
+// every individual guess is kept visible until the round ends.
+function renderGuessList() {
+  el.emptyState.classList.toggle("hidden", roundGuesses.length > 0);
+  const sorted = [...roundGuesses].sort((a, b) => a.distanceKm - b.distanceKm);
+  el.guessList.innerHTML = "";
+  sorted.forEach((fb, i) => {
+    el.guessList.appendChild(buildGuessRow(fb, i + 1));
+  });
+}
 
 function updateClosestTracker() {
   if (!closestThisRound) {
