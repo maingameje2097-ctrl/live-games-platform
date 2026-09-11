@@ -39,6 +39,25 @@
 
     <div id="connectionBanner" class="banner hidden"></div>
 
+    <!-- ============ FLOATING GLOBE ============ -->
+    <div id="globeCard" class="globe-card">
+      <div class="globe-controls">
+        <button id="zoomOutBtn" class="zoom-btn" aria-label="Zoom out">−</button>
+        <input id="zoomSlider" type="range" min="10" max="1000" value="100" step="10" aria-label="Zoom" />
+        <button id="zoomInBtn" class="zoom-btn" aria-label="Zoom in">+</button>
+        <button id="recenterBtn" class="chip-btn">Recenter</button>
+        <button id="enlargeBtn" class="chip-btn">Enlarge</button>
+      </div>
+      <div id="globeViewport" class="globe-viewport">
+        <svg id="globeSvg"></svg>
+        <div class="globe-legend">
+          <span><i class="dot dot--guess"></i> guessed</span>
+          <span><i class="dot dot--correct"></i> answer</span>
+        </div>
+      </div>
+      <div class="globe-hint">Drag to rotate · slider or +/− to zoom (10%–1000%) · tap Enlarge for full screen</div>
+    </div>
+
     <main id="board">
       <div id="hintStrip"></div>
       <div id="closestTracker" class="hidden"></div>
@@ -53,6 +72,16 @@
 
   </div>
 
+  <!-- ============ CELEBRATION OVERLAY ============ -->
+  <div id="celebrationOverlay" class="celebration hidden">
+    <div class="celebration-card">
+      <div class="celebration-emojis">🎉 🎊 🌍 🎊 🎉</div>
+      <div class="celebration-title">Correct!</div>
+      <div id="celebrationName" class="celebration-name">—</div>
+      <div id="celebrationSub" class="celebration-sub">got it right</div>
+    </div>
+  </div>
+
   <!-- ============ PANEL BACKDROP ============ -->
   <div id="panelBackdrop" class="hidden"></div>
 
@@ -65,13 +94,14 @@
       </div>
       <div class="modal-body">
         <p><b>Goal:</b> Figure out the mystery country before time runs out. Comment the country's name in the TikTok live chat to guess — first correct guess wins the round.</p>
+        <p><b>The globe:</b> every guess lights up gold on the floating globe above the board, so viewers can see where guesses are landing. Drag it to look around, or zoom in on a region.</p>
         <p><b>Reading your feedback tags:</b></p>
         <ul>
-          <li><span class="chip chip--match">🌍 Same continent</span> the target is on the same continent as your guess</li>
-          <li><span class="chip chip--pop">Pop ▲/▼</span> the target's population is higher / lower than your guess</li>
-          <li><span class="chip chip--area">Area ▲/▼</span> the target's land area is bigger / smaller than your guess</li>
+          <li><span class="chip chip--match">🌍 continent match</span> the target is on the same continent as your guess</li>
+          <li><span class="chip chip--pop">👥 pop ▲/▼</span> the target's population is higher / lower than your guess</li>
+          <li><span class="chip chip--area">📐 area ▲/▼</span> the target's land area is bigger / smaller than your guess</li>
           <li><span class="chip chip--direction">↗ NE · 7,533 km</span> compass direction &amp; distance from your guess to the target</li>
-          <li><span class="chip">62% close</span> an overall "hot or cold" score — 100% means correct</li>
+          <li><span class="chip chip--hot">62% close</span> an overall "hot or cold" score — greener means closer, 100% means correct</li>
         </ul>
         <p><b>Sorting:</b> every guess stays on screen for the whole round and automatically re-sorts, closest to the answer always rising to the top.</p>
         <p><b>Hints:</b> the host can reveal up to 3 hints (continent → first letter → capital city) from the 💡 button. Each hint used slightly lowers the points available that round.</p>
@@ -122,7 +152,8 @@
       </section>
 
       <section class="panel-section">
-        <button id="startGameBtn" class="btn btn--primary btn--block">Start Round</button>
+        <button id="applySettingsBtn" class="btn btn--primary btn--block">Apply Settings &amp; Start Round</button>
+        <p class="section-hint">Mode and difficulty above only take effect once you tap Apply — pick everything first, then apply.</p>
       </section>
 
       <section class="panel-section">
@@ -156,7 +187,10 @@
     </div>
   </aside>
 
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/globe.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

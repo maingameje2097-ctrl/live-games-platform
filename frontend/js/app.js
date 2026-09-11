@@ -31,7 +31,7 @@ const el = {
 
   modeSegmented: document.getElementById("modeSegmented"),
   difficultySegmented: document.getElementById("difficultySegmented"),
-  startGameBtn: document.getElementById("startGameBtn"),
+  applySettingsBtn: document.getElementById("applySettingsBtn"),
 
   hostAnswerInput: document.getElementById("hostAnswerInput"),
   hostSubmitBtn: document.getElementById("hostSubmitBtn"),
@@ -39,6 +39,17 @@ const el = {
 
   scoreList: document.getElementById("scoreList"),
   scoreTabs: document.querySelectorAll(".score-tab"),
+
+  globeCard: document.getElementById("globeCard"),
+  zoomSlider: document.getElementById("zoomSlider"),
+  zoomInBtn: document.getElementById("zoomInBtn"),
+  zoomOutBtn: document.getElementById("zoomOutBtn"),
+  recenterBtn: document.getElementById("recenterBtn"),
+  enlargeBtn: document.getElementById("enlargeBtn"),
+
+  celebrationOverlay: document.getElementById("celebrationOverlay"),
+  celebrationName: document.getElementById("celebrationName"),
+  celebrationSub: document.getElementById("celebrationSub"),
 };
 
 let latestLeaderboards = { round: [], total: [] };
@@ -49,6 +60,10 @@ let closestThisRound = null; // { username, distanceKm, proximity, guessText }
 let roundGuesses = []; // every guess kept for the round, always re-sorted by closeness before rendering
 let latestStatus = { connected: false, testMode: true };
 
+// Settings panel selections are staged here and only take effect when "Apply" is tapped
+let pendingMode = "test";
+let pendingDifficulty = "standard";
+
 const COMPASS_ARROW = {
   N: "↑", NNE: "↗", NE: "↗", ENE: "↗",
   E: "→", ESE: "↘", SE: "↘", SSE: "↘",
@@ -56,15 +71,54 @@ const COMPASS_ARROW = {
   W: "←", WNW: "↖", NW: "↖", NNW: "↖",
 };
 
+// ---------- Globe init ----------
+if (window.Globe) {
+  Globe.init();
+}
+
+el.zoomSlider.addEventListener("input", (e) => {
+  Globe.setZoomPercent(Number(e.target.value));
+});
+el.zoomInBtn.addEventListener("click", () => {
+  const next = Globe.getZoomPercent() + 25;
+  el.zoomSlider.value = Math.min(1000, next);
+  Globe.setZoomPercent(Number(el.zoomSlider.value));
+});
+el.zoomOutBtn.addEventListener("click", () => {
+  const next = Globe.getZoomPercent() - 25;
+  el.zoomSlider.value = Math.max(10, next);
+  Globe.setZoomPercent(Number(el.zoomSlider.value));
+});
+el.recenterBtn.addEventListener("click", () => {
+  Globe.recenter();
+  el.zoomSlider.value = 100;
+});
+el.enlargeBtn.addEventListener("click", () => {
+  const enlarging = !el.globeCard.classList.contains("is-enlarged");
+  el.globeCard.classList.toggle("is-enlarged", enlarging);
+  el.enlargeBtn.textContent = enlarging ? "Shrink" : "Enlarge";
+  el.enlargeBtn.classList.toggle("active", enlarging);
+  el.panelBackdrop.classList.toggle("hidden", !enlarging);
+  el.panelBackdrop.classList.toggle("for-globe", enlarging);
+  setTimeout(() => Globe.afterResize(), 220); // wait for CSS transition/reflow
+});
+
 // ---------- Side panels (Settings / Leaderboard) open + close ----------
 function openPanel(panelEl) {
   el.panelBackdrop.classList.remove("hidden");
+  el.panelBackdrop.classList.remove("for-globe");
   panelEl.classList.remove("hidden");
 }
 function closeAllPanels() {
   el.panelBackdrop.classList.add("hidden");
   el.settingsDrawer.classList.add("hidden");
   el.leaderboardDrawer.classList.add("hidden");
+  if (el.globeCard.classList.contains("is-enlarged")) {
+    el.globeCard.classList.remove("is-enlarged");
+    el.enlargeBtn.textContent = "Enlarge";
+    el.enlargeBtn.classList.remove("active");
+    setTimeout(() => Globe.afterResize(), 220);
+  }
 }
 el.settingsBtn.addEventListener("click", () => openPanel(el.settingsDrawer));
 el.leaderboardBtn.addEventListener("click", () => openPanel(el.leaderboardDrawer));
@@ -102,26 +156,32 @@ el.disconnectBtn.addEventListener("click", () => {
   });
 });
 
-// ---------- Mode (Live / Test) ----------
+// ---------- Mode (Live / Test) — staged, applied on "Apply" ----------
 el.modeSegmented.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-mode]");
   if (!btn) return;
   [...el.modeSegmented.children].forEach((b) => b.classList.remove("active"));
   btn.classList.add("active");
-  socket.emit("host:setTestMode", btn.dataset.mode === "test");
+  pendingMode = btn.dataset.mode;
 });
 
-// ---------- Difficulty ----------
+// ---------- Difficulty — staged, applied on "Apply" ----------
 el.difficultySegmented.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-level]");
   if (!btn) return;
   [...el.difficultySegmented.children].forEach((b) => b.classList.remove("active"));
   btn.classList.add("active");
-  socket.emit("host:setDifficulty", btn.dataset.level);
+  pendingDifficulty = btn.dataset.level;
 });
 
-// ---------- Round controls ----------
-el.startGameBtn.addEventListener("click", () => socket.emit("host:startGame"));
+// ---------- Apply settings & start round ----------
+el.applySettingsBtn.addEventListener("click", () => {
+  socket.emit("host:setTestMode", pendingMode === "test");
+  socket.emit("host:setDifficulty", pendingDifficulty);
+  socket.emit("host:startGame");
+  closeAllPanels();
+});
+
 el.hintIconBtn.addEventListener("click", () => socket.emit("host:requestHint"));
 
 el.hostSubmitBtn.addEventListener("click", submitHostAnswer);
@@ -228,6 +288,7 @@ socket.on("roundStart", (data) => {
   updateClosestTracker();
   renderGuessList();
   startTimer(data.seconds);
+  if (window.Globe) Globe.clearHighlights();
 });
 
 socket.on("hint", (data) => {
@@ -249,25 +310,42 @@ socket.on("guessFeedback", (fb) => {
     updateClosestTracker();
   }
 
+  if (window.Globe) {
+    if (fb.correct) Globe.highlightCorrect(fb.guessText);
+    else Globe.highlightGuess(fb.guessText);
+  }
+
   renderGuessList(fb);
+
+  if (fb.correct) {
+    showCelebration(fb.username);
+  }
 });
+
+// Proximity "heat" class: greener the closer the guess, redder the farther.
+function heatClass(pct) {
+  if (pct >= 70) return "chip--hot";
+  if (pct >= 40) return "chip--warm";
+  return "chip--cold";
+}
 
 function buildGuessRow(fb, rank, isNewest) {
   const row = document.createElement("li");
   row.className = "guess-row" + (fb.correct ? " correct" : "") + (isNewest ? " guess-row--new" : "");
   const rankChip = `<span class="chip chip--rank">#${rank}</span>`;
+  const nameSpan = `<span class="guess-name"><span class="who">${escapeHtml(fb.username)}:</span> ${escapeHtml(fb.guessText)}</span>`;
   if (fb.correct) {
-    row.innerHTML = `${rankChip}<span class="guess-name">${escapeHtml(fb.username)}</span><span class="chip chip--match">✓ Correct — ${escapeHtml(fb.guessText)}</span>`;
+    row.innerHTML = `${rankChip}${nameSpan}<span class="chip chip--match">✓ correct!</span>`;
   } else {
     const arrow = COMPASS_ARROW[fb.direction] || "•";
     row.innerHTML = `
       ${rankChip}
-      <span class="guess-name">${escapeHtml(fb.username)}: ${escapeHtml(fb.guessText)}</span>
-      <span class="chip ${fb.continentMatch ? "chip--match" : "chip--miss"}">🌍 ${fb.continentMatch ? "same continent" : "different continent"}</span>
-      <span class="chip chip--pop">Pop ${fb.populationHint === "higher" ? "▲" : "▼"}</span>
-      <span class="chip chip--area">Area ${fb.areaHint === "higher" ? "▲" : "▼"}</span>
-      <span class="chip chip--direction">${arrow} ${fb.direction} · ${fb.distanceKm.toLocaleString()} km away</span>
-      <span class="chip chip--proximity">${fb.proximity}% close</span>
+      ${nameSpan}
+      <span class="chip ${fb.continentMatch ? "chip--match" : "chip--miss"}">🌍 ${fb.continentMatch ? "same continent" : "diff. continent"}</span>
+      <span class="chip chip--pop">👥 pop ${fb.populationHint === "higher" ? "▲" : "▼"}</span>
+      <span class="chip chip--area">📐 area ${fb.areaHint === "higher" ? "▲" : "▼"}</span>
+      <span class="chip chip--direction">${arrow} ${fb.direction} · ${fb.distanceKm.toLocaleString()} km</span>
+      <span class="chip ${heatClass(fb.proximity)}">${fb.proximity}% close</span>
     `;
   }
   return row;
@@ -294,12 +372,25 @@ function updateClosestTracker() {
   el.closestTracker.innerHTML = `🎯 Closest so far: <b>${escapeHtml(closestThisRound.username)}</b> (${escapeHtml(closestThisRound.guessText)}) — ${closestThisRound.distanceKm.toLocaleString()} km away, ${closestThisRound.proximity}% close`;
 }
 
+// ---------- Celebration ----------
+let celebrationTimeout = null;
+function showCelebration(username) {
+  el.celebrationName.textContent = username;
+  el.celebrationSub.textContent = "got it right! 🎉";
+  el.celebrationOverlay.classList.remove("hidden");
+  clearTimeout(celebrationTimeout);
+  celebrationTimeout = setTimeout(() => {
+    el.celebrationOverlay.classList.add("hidden");
+  }, 3200);
+}
+
 socket.on("roundSolved", (data) => {
   el.hintStrip.textContent = `${data.winner} got it! The answer was ${data.answer}. (+${data.points} pts)`;
 });
 
 socket.on("roundTimeout", (data) => {
   el.hintStrip.textContent = `Time's up! The answer was ${data.answer}.`;
+  if (window.Globe) Globe.highlightCorrect(data.answer);
 });
 
 socket.on("comment", (c) => {
